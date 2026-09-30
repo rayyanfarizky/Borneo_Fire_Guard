@@ -335,15 +335,6 @@ function render(d) {
  
   /* ---- Total skor dan status ---- */
   if (sMq !== null && sSoil !== null) {
-  const total = sMq + sSoil;
-  const status = statusDari(total);
-
-  console.log("Total Skor:", total);
-  console.log("Status:", status);
-}
-    const total = sMq + sSoil;
-    const status = statusDari(total);
-    const ui = STATUS_UI[status];
     $("risk").style.setProperty("--c", ui.color);
     $("riskStatus").textContent = status;
     $("riskDesc").textContent = ui.desc;
