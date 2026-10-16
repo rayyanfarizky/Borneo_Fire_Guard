@@ -3,17 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Borneo Fire Guard
-</title>
+<title>Borneo Fire Guard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    /* ====== GANTI LATAR DI SINI ======
-       Ganti nilai --bg-image dengan gambar dari Figma kamu, contoh:
-       --bg-image: url("latar.png");
-       atau pakai tombol "Ganti latar" di pojok kanan atas. */
     --bg-image:
       radial-gradient(1200px 500px at 15% -10%, rgba(120,160,90,.35), transparent 60%),
       radial-gradient(900px 500px at 100% 0%, rgba(70,120,130,.30), transparent 60%),
@@ -27,6 +22,7 @@
     --moss: #9cc46b;
     --water: #5cc6c9;
     --heat: #f0b44c;
+    --orange: #e08a3e;
     --smoke: #b7a9d8;
     --bad: #f07a6a;
     --radius: 22px;
@@ -93,7 +89,8 @@
   .gauge .track { fill: none; stroke: rgba(255,244,220,.14); stroke-width: 16; stroke-linecap: round; }
   .gauge .fill { fill: none; stroke: var(--smoke); stroke-width: 16; stroke-linecap: round; transition: stroke-dasharray .8s ease, stroke .4s; }
   .gauge .center { position: absolute; left: 0; right: 0; bottom: 4px; text-align: center; }
-  .gauge .num { font-size: 42px; color: var(--smoke); }
+  .gauge .num { font-size: 40px; }
+  .gauge .num.text { font-size: 30px; letter-spacing: -.01em; }
 
   .spark { width: 100%; height: 34px; margin-top: 14px; display: block; }
   .spark polyline { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; opacity: .9; }
@@ -119,12 +116,10 @@
   <header>
     <div>
       <h1>Borneo Fire Guard</h1>
-      <p class="sub">Kelembapan tanah, suhu, dan kadar asap atau gas dari sensor kamu, diperbarui langsung dari Firebase.</p>
+      <p class="sub">Kelembapan tanah, suhu, dan kadar asap atau gas dari sensor, diperbarui langsung dari Firebase.</p>
     </div>
     <div class="tools">
       <span id="conn" class="conn"><span class="dot"></span><span id="connText">Menghubungkan…</span></span>
-      <label class="btn" for="bgFile" tabindex="0">Ganti latar</label>
-      <input id="bgFile" type="file" accept="image/*" hidden>
     </div>
   </header>
 
@@ -178,7 +173,7 @@
             <path class="track" d="M 14 104 A 86 86 0 0 1 186 104" pathLength="100"/>
             <path class="fill" id="gasArc" d="M 14 104 A 86 86 0 0 1 186 104" pathLength="100" stroke-dasharray="0 100"/>
           </svg>
-          <div class="center"><div class="num"><span id="gasVal">--</span><small>ppm</small></div></div>
+          <div class="center"><div class="num text" id="gasVal">--</div></div>
         </div>
         <svg class="spark" id="sparkGas" viewBox="0 0 120 32" preserveAspectRatio="none"><polyline stroke="var(--smoke)" points=""/></svg>
       </section>
@@ -208,8 +203,8 @@ const FIREBASE_CONFIG = {
 };
 
 /* Lokasi data di Realtime Database dan nama field-nya.
-   PENTING: field "gas" sekarang berisi nilai ADC mentah MQ-2 (mq2ADC, 0-4095),
-   bukan ppm. Pastikan ESP32 mengirim nilai mq2ADC ke field ini. */
+   PENTING: field "gas" berisi nilai ADC mentah MQ-2 (0-4095), bukan ppm.
+   Pastikan ESP32 mengirim nilai mentah ini ke field MQ2. */
 const DB_PATH = "FireGuardBorneo";
 
 const FIELD = {
@@ -217,9 +212,9 @@ const FIELD = {
   temp: "Suhu",
   gas: "MQ2"
 };
- 
+
 const ADC_MAX = 4095; // ESP32 ADC 12-bit
- 
+
 /* =====================================================
    2. LOGIKA SKOR (sama persis dengan kode ESP32)
    ===================================================== */
@@ -234,35 +229,22 @@ function skorSoil(kelembapan) {
   if (kelembapan >= 40) return 1;
   return 2;
 }
-function statusDari(total) {
-  if (total <= 1) return "NORMAL";
-  if (total <= 3) return "WASPADA";
-  if (total <= 4) return "SIAGA";
-  return "RISIKO TINGGI";
-}
- 
-const STATUS_UI = {
-  "NORMAL":        { color: "var(--moss)",   desc: "Kondisi aman. Asap rendah dan tanah cukup lembap." },
-  "WASPADA":       { color: "var(--heat)",   desc: "Ada tanda awal risiko. Pantau terus sensor." },
-  "SIAGA":         { color: "var(--orange)", desc: "Risiko meningkat. Siapkan tindakan pencegahan." },
-  "RISIKO TINGGI": { color: "var(--bad)",    desc: "Asap tinggi dan tanah kering. Segera periksa lokasi." }
-};
- 
+
 /* ===================================================== */
 const $ = (id) => document.getElementById(id);
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const hist = { soil: [], temp: [], gas: [] };
 const MAX_POINTS = 30;
- 
+
 function setConn(state, text) {
   $("conn").className = "conn " + state;
   $("connText").textContent = text;
 }
- 
+
 function pill(el, text, color) {
   el.textContent = text; el.style.color = color;
 }
- 
+
 function spark(id, arr) {
   if (arr.length < 2) return;
   const min = Math.min(...arr), max = Math.max(...arr), span = max - min || 1;
@@ -273,12 +255,12 @@ function spark(id, arr) {
   }).join(" ");
   $(id).querySelector("polyline").setAttribute("points", pts);
 }
- 
+
 function push(key, v) {
   hist[key].push(v);
   if (hist[key].length > MAX_POINTS) hist[key].shift();
 }
- 
+
 function render(d) {
   const soil = Number(d[FIELD.soil]);
   const temp = Number(d[FIELD.temp]);
@@ -286,29 +268,27 @@ function render(d) {
   const hasSoil = d[FIELD.soil] != null && !isNaN(soil);
   const hasTemp = d[FIELD.temp] != null && !isNaN(temp);
   const hasGas  = d[FIELD.gas]  != null && !isNaN(gas);
- 
-  let sMq = null, sSoil = null;
- 
+
   /* ---- Kelembapan tanah ---- */
   if (hasSoil) {
-    sSoil = skorSoil(soil);
     push("soil", soil);
     $("soilVal").textContent = soil.toFixed(0);
     $("wet").style.height = clamp(soil, 0, 100) + "%";
+    const sSoil = skorSoil(soil);
     if (sSoil === 0) {
-      pill($("soilPill"), "Basah · skor 0", "var(--water)");
+      pill($("soilPill"), "Basah", "var(--water)");
       $("soilHint").textContent = "Kelembapan 70% atau lebih. Risiko dari tanah rendah.";
     } else if (sSoil === 1) {
-      pill($("soilPill"), "Sedang · skor 1", "var(--heat)");
+      pill($("soilPill"), "Sedang", "var(--heat)");
       $("soilHint").textContent = "Kelembapan 40–69%. Tanah mulai mengering.";
     } else {
-      pill($("soilPill"), "Kering · skor 2", "var(--bad)");
+      pill($("soilPill"), "Kering", "var(--bad)");
       $("soilHint").textContent = "Kelembapan di bawah 40%. Tanah kering dan mudah terbakar.";
     }
     spark("sparkSoil", hist.soil);
   }
- 
-  /* ---- Suhu (hanya informasi, tidak masuk skor) ---- */
+
+  /* ---- Suhu (hanya informasi) ---- */
   if (hasTemp) {
     push("temp", temp);
     $("tempVal").textContent = temp.toFixed(1);
@@ -318,38 +298,33 @@ function render(d) {
     else pill($("tempPill"), "Normal", "var(--moss)");
     spark("sparkTemp", hist.temp);
   }
- 
-  /* ---- MQ-2 ---- */
+
+  /* ---- MQ-2: ditampilkan sebagai High / Low, bukan angka ppm ---- */
   if (hasGas) {
-    sMq = skorMQ2(gas);
     push("gas", gas);
-    $("gasVal").textContent = gas.toFixed(0);
+    const sMq = skorMQ2(gas);
+    const isHigh = sMq >= 2; // skor 2 (Tinggi) dan 3 (Bahaya) dianggap "High"
     const arc = $("gasArc");
-    const names = ["Aman", "Waspada", "Tinggi", "Bahaya"];
-    const colors = ["var(--moss)", "var(--heat)", "var(--orange)", "var(--bad)"];
-    pill($("gasPill"), names[sMq] + " · skor " + sMq, colors[sMq]);
-    arc.style.stroke = sMq === 0 ? "var(--smoke)" : colors[sMq];
+    let color;
+    if (sMq === 0) color = "var(--moss)";
+    else if (sMq === 1) color = "var(--heat)";
+    else if (sMq === 2) color = "var(--orange)";
+    else color = "var(--bad)";
+
+    $("gasVal").textContent = isHigh ? "High" : "Low";
+    $("gasVal").style.color = color;
+    pill($("gasPill"), isHigh ? "High" : "Low", color);
+    arc.style.stroke = color;
     arc.setAttribute("stroke-dasharray", (clamp(gas / ADC_MAX, 0, 1) * 100) + " 100");
     spark("sparkGas", hist.gas);
   }
- 
-  /* ---- Total skor dan status ---- */
-  if (sMq !== null && sSoil !== null) {
-    $("risk").style.setProperty("--c", ui.color);
-    $("riskStatus").textContent = status;
-    $("riskDesc").textContent = ui.desc;
-    $("totalSkor").textContent = total;
-    $("skMq").firstChild.textContent = sMq + " ";
-    $("skSoil").firstChild.textContent = sSoil + " ";
-    document.querySelectorAll(".seg").forEach((el, i) => el.classList.toggle("on", i < total));
-  }
- 
+
   $("updated").textContent = "Diperbarui " + new Date().toLocaleTimeString("id-ID");
 }
- 
+
 /* ---------- Koneksi Firebase atau mode demo ---------- */
 const configured = !FIREBASE_CONFIG.apiKey.startsWith("ISI_");
- 
+
 if (configured && window.firebase) {
   try {
     firebase.initializeApp(FIREBASE_CONFIG);
@@ -383,27 +358,9 @@ if (configured && window.firebase) {
   for (let i = 0; i < 12; i++) tick();
   setInterval(tick, 2500);
 }
-/* ---------- Ganti latar ---------- */
-function applyBg(url) {
-  document.documentElement.style.setProperty("--bg-image", 'url("' + url + '")');
-}
-try {
-  const saved = localStorage.getItem("bg-image");
-  if (saved) applyBg(saved);
-} catch (e) {}
-$("bgFile").addEventListener("change", (e) => {
-  const f = e.target.files[0];
-  if (!f) return;
-  const r = new FileReader();
-  r.onload = () => {
-    applyBg(r.result);
-    try { localStorage.setItem("bg-image", r.result); } catch (err) {}
-  };
-  r.readAsDataURL(f);
-});
-document.querySelector('label[for="bgFile"]').addEventListener("keydown", (e) => {
-  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("bgFile").click(); }
-});
+
+/* Bersihkan latar lama yang mungkin tersimpan di browser */
+try { localStorage.removeItem("bg-image"); } catch (e) {}
 </script>
 </body>
 </html>
