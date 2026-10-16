@@ -90,7 +90,7 @@
   .gauge .fill { fill: none; stroke: var(--smoke); stroke-width: 16; stroke-linecap: round; transition: stroke-dasharray .8s ease, stroke .4s; }
   .gauge .center { position: absolute; left: 0; right: 0; bottom: 4px; text-align: center; }
   .gauge .num { font-size: 40px; }
-  .gauge .num.text { font-size: 30px; letter-spacing: -.01em; }
+  .gauge .num.text { font-size: 21px; line-height: 1.2; letter-spacing: -.01em; padding: 0 44px; }
 
   .spark { width: 100%; height: 34px; margin-top: 14px; display: block; }
   .spark polyline { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; opacity: .9; }
@@ -116,7 +116,7 @@
   <header>
     <div>
       <h1>Borneo Fire Guard</h1>
-      <p class="sub">Kelembapan tanah, suhu, dan kadar asap atau gas dari sensor, diperbarui langsung dari Firebase.</p>
+      <p class="sub">Kelembapan tanah, suhu, dan kadar asap atau gas dari sensor kamu, diperbarui langsung dari Firebase.</p>
     </div>
     <div class="tools">
       <span id="conn" class="conn"><span class="dot"></span><span id="connText">Menghubungkan…</span></span>
@@ -215,6 +215,10 @@ const FIELD = {
 
 const ADC_MAX = 4095; // ESP32 ADC 12-bit
 
+/* Nilai MQ2 dari Firebase di atas angka ini = "Gas/asap terdeteksi",
+   sama dengan atau di bawahnya = "Gas/asap aman". */
+const GAS_THRESHOLD = 700;
+
 /* =====================================================
    2. LOGIKA SKOR (sama persis dengan kode ESP32)
    ===================================================== */
@@ -299,24 +303,29 @@ function render(d) {
     spark("sparkTemp", hist.temp);
   }
 
-  /* ---- MQ-2: ditampilkan sebagai High / Low, bukan angka ppm ---- */
+  /* ---- MQ-2: lebih dari GAS_THRESHOLD = terdeteksi, selain itu aman ---- */
+  let gasDetected = false;
   if (hasGas) {
     push("gas", gas);
-    const sMq = skorMQ2(gas);
-    const isHigh = sMq >= 2; // skor 2 (Tinggi) dan 3 (Bahaya) dianggap "High"
+    gasDetected = gas > GAS_THRESHOLD;
+    const color = gasDetected ? "var(--bad)" : "var(--moss)";
     const arc = $("gasArc");
-    let color;
-    if (sMq === 0) color = "var(--moss)";
-    else if (sMq === 1) color = "var(--heat)";
-    else if (sMq === 2) color = "var(--orange)";
-    else color = "var(--bad)";
 
-    $("gasVal").textContent = isHigh ? "High" : "Low";
+    $("gasVal").textContent = gasDetected ? "Gas/asap terdeteksi" : "Gas/asap aman";
     $("gasVal").style.color = color;
-    pill($("gasPill"), isHigh ? "High" : "Low", color);
+    pill($("gasPill"), gasDetected ? "Terdeteksi" : "Aman", color);
     arc.style.stroke = color;
     arc.setAttribute("stroke-dasharray", (clamp(gas / ADC_MAX, 0, 1) * 100) + " 100");
     spark("sparkGas", hist.gas);
+  }
+
+  /* ---- Banner peringatan ---- */
+  const al = $("alert");
+  if (gasDetected) {
+    al.textContent = "Gas/asap terdeteksi. Segera periksa lokasi sensor.";
+    al.classList.add("show");
+  } else {
+    al.classList.remove("show");
   }
 
   $("updated").textContent = "Diperbarui " + new Date().toLocaleTimeString("id-ID");
